@@ -64,12 +64,7 @@
 </header>
 <main>
   <div class="idbar">
-    <select id="zone">
-      <option value="">選擇塔台</option>
-      <option value="北塔">北塔</option>
-      <option value="南塔">南塔</option>
-    </select>
-    <input id="ctrl" placeholder="管制員姓名"/>
+    <select id="duty"></select>
   </div>
   <div class="addbar">
     <input id="codeIn" maxlength="6" placeholder="序號" />
@@ -189,10 +184,23 @@ let names  = JSON.parse(localStorage.names  || "{}");   // code -> 塔台自訂�
 const savePilots = () => localStorage.pilotCodes = JSON.stringify(Object.keys(pilots));  // 記住已加入的飛手
 
 const $ = id => document.getElementById(id);
-$("zone").value = localStorage.zone || "";
-$("ctrl").value = localStorage.ctrl || "";
-$("zone").onchange = () => { localStorage.zone = $("zone").value; reRegister(); };
-$("ctrl").oninput = () => { localStorage.ctrl = $("ctrl").value; reRegister(); };
+// ── 塔台人員資料庫（值班管制員）── 之後要加人就在這個陣列加一筆
+const ROSTER = [
+  { tower: "南塔", name: "蔡佩勲" },
+];
+let duty = JSON.parse(localStorage.duty || '{"tower":"","name":""}');
+(function initDuty() {
+  const sel = $("duty");
+  sel.innerHTML = '<option value="">選擇值班管制員</option>' +
+    ROSTER.map((r, i) => `<option value="${i}">${r.tower}・${r.name}</option>`).join("");
+  const idx = ROSTER.findIndex(r => r.tower === duty.tower && r.name === duty.name);
+  sel.value = idx >= 0 ? String(idx) : "";
+  sel.onchange = () => {
+    duty = sel.value === "" ? { tower: "", name: "" } : { ...ROSTER[sel.value] };
+    localStorage.duty = JSON.stringify(duty);
+    reRegister();
+  };
+})();
 
 // 顯示名：塔台自訂名 > 序號
 const displayName = p => names[p.code] || p.code;
@@ -255,7 +263,7 @@ function clearNotam() {
 function publishTower(code) {
   if (!client || !client.connected) return;
   client.publish(T.tower(code),
-    JSON.stringify({ tower: $("zone").value, ctrl: $("ctrl").value }),
+    JSON.stringify({ tower: duty.tower, ctrl: duty.name }),
     { qos: 1, retain: true });
 }
 // 塔台改名 → 重發身分給所有飛手
