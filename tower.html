@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>塔台管制</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="塔台" />
+<meta name="theme-color" content="#0B0E14" />
+<link rel="apple-touch-icon" href="icon-tower.png" />
+<link rel="icon" href="icon-tower.png" />
+<style>
+  :root { --bg:#0B0E14; --card:#161B26; --accent:#2FE0A8; --blue:#3B82F6; --amber:#F5A623; --red:#EF4444; --dim:#8A93A6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:#fff; font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid #ffffff14; position:sticky; top:0; background:var(--bg); }
+  header h1 { font-size:20px; margin:0; letter-spacing:1px; }
+  .dot { width:11px;height:11px;border-radius:50%;background:var(--red); }
+  .dot.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  input { background:var(--bg); color:#fff; border:1px solid #ffffff22; border-radius:10px; padding:9px 12px; font-size:15px; }
+  .who { margin-left:auto; color:var(--dim); font-size:13px; display:flex; gap:6px; align-items:center; }
+  .who input { width:90px; padding:5px 8px; font-size:13px; }
+  main { padding:18px 20px; max-width:760px; margin:0 auto; }
+  .addbar { display:flex; gap:10px; margin-bottom:18px; }
+  .addbar input { flex:1; text-transform:uppercase; letter-spacing:6px; text-align:center; font-size:18px; }
+  button { cursor:pointer; border:none; border-radius:12px; font-size:15px; font-weight:700; padding:11px 16px; color:#fff; background:var(--blue); font-family:inherit; }
+  button.ghost { background:#ffffff14; }
+  .pilot { background:var(--card); border:1px solid #ffffff14; border-radius:16px; padding:16px; margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
+  .pilot:hover { border-color:#ffffff33; }
+  .pname { font-size:18px; font-weight:700; } .pcode { color:var(--dim); font-size:12px; }
+  .grow { flex:1; }
+  .badge { padding:5px 11px; border-radius:20px; font-size:12px; font-weight:700; }
+  .b-wait { background:#F5A62330; color:var(--amber); } .b-ok { background:#2FE0A830; color:var(--accent); }
+  .batt { color:var(--accent); font-size:13px; } .batt.low { color:var(--red); }
+  .empty { color:var(--dim); text-align:center; margin-top:60px; }
+  .notambar { display:flex; gap:10px; margin-bottom:10px; }
+  .notambar input { flex:1; letter-spacing:0; text-align:left; }
+  .notambar button.ghost { background:#ffffff14; }
+  .notamnow { display:none; background:#F5A62318; border:1px solid var(--amber); color:var(--amber);
+              border-radius:12px; padding:11px 15px; margin-bottom:18px; font-weight:700; }
+  .notamnow.show { display:block; }
+  /* modal */
+  .mask { position:fixed; inset:0; background:#000000aa; display:none; align-items:flex-end; justify-content:center; }
+  .mask.show { display:flex; }
+  .sheet { background:var(--card); width:min(560px,100%); border-radius:22px 22px 0 0; padding:22px; }
+  .sheet h2 { margin:0 0 2px; font-size:20px; }
+  .banner { padding:12px 16px; border-radius:12px; font-weight:600; margin:14px 0; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .cmd { padding:18px 6px; border-radius:14px; text-align:center; font-weight:700; border:1.2px solid var(--blue); background:#3B82F624; }
+  .cmd.emg { border-color:var(--red); background:#EF444424; color:var(--red); }
+  .closex { float:right; color:var(--dim); cursor:pointer; font-size:22px; line-height:1; }
+</style>
+  <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>🗼 塔台管制</h1>
+  <span class="dot" id="dot"></span>
+  <span class="who">塔台
+    <input id="zone" placeholder="北塔"/>
+    <input id="ctrl" placeholder="管制員"/>
+  </span>
+</header>
+<main>
+  <div class="addbar">
+    <input id="codeIn" maxlength="6" placeholder="輸入序號 例 K7P2Q" />
+    <button onclick="addPilot()">＋ 新增飛手</button>
+  </div>
+  <div id="list"></div>
+  <div class="empty" id="empty">尚無飛手 — 輸入飛手裝置畫面上顯示的序號來配對</div>
+</main>
+
+<div class="mask" id="mask">
+  <div class="sheet">
+    <span class="closex" onclick="closeSheet()">✕</span>
+    <h2 id="sName">—</h2>
+    <div class="pcode" id="sCode"></div>
+    <div class="banner" id="sBanner"></div>
+    <div style="color:var(--dim);font-weight:600;margin-bottom:8px">飛航公告（只給這位飛手）</div>
+    <div class="notambar">
+      <input id="sNotamIn" maxlength="60" placeholder="輸入飛航公告…" />
+      <button onclick="setNotamFromInput()">發布</button>
+      <button class="ghost" onclick="clearNotam()">清除</button>
+    </div>
+    <div style="color:var(--dim);font-weight:600;margin:14px 0 8px">下達指令</div>
+    <div class="grid" id="sGrid"></div>
+  </div>
+</div>
+
+<div class="mask" id="minMask">
+  <div class="sheet" style="text-align:center">
+    <span class="closex" onclick="closeMin()">✕</span>
+    <h2>降落</h2>
+    <div style="color:var(--dim);margin:6px 0 14px">幾分鐘後降落？</div>
+    <input id="minIn" type="number" inputmode="numeric" min="1" max="120" value="5"
+      oninput="updateMinHint()"
+      style="width:150px;text-align:center;font-size:36px;letter-spacing:2px" />
+    <div style="margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="ghost" onclick="setMin(3)">3 分</button>
+      <button class="ghost" onclick="setMin(5)">5 分</button>
+      <button class="ghost" onclick="setMin(10)">10 分</button>
+      <button class="ghost" onclick="setMin(15)">15 分</button>
+    </div>
+    <div id="minHint" style="color:var(--accent);font-size:20px;font-weight:800;margin-bottom:14px;min-height:26px"></div>
+    <button onclick="confirmMin()" style="width:100%">送出降落指令</button>
+  </div>
+</div>
+
+<div class="mask" id="timeMask">
+  <div class="sheet" style="text-align:center">
+    <span class="closex" onclick="closeTime()">✕</span>
+    <h2>可能空檔</h2>
+    <div style="color:var(--dim);margin:6px 0 14px">預計可能有空檔的時間</div>
+    <input id="timeIn" type="time" style="font-size:30px;padding:8px 14px;text-align:center" />
+    <div style="margin:16px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="ghost" onclick="setTimeQuick(0)">現在</button>
+      <button class="ghost" onclick="setTimeQuick(15)">+15 分</button>
+      <button class="ghost" onclick="setTimeQuick(30)">+30 分</button>
+      <button class="ghost" onclick="setTimeQuick(60)">+60 分</button>
+    </div>
+    <button onclick="confirmTime()" style="width:100%">送出</button>
+  </div>
+</div>
+
+<div class="mask" id="txtMask">
+  <div class="sheet">
+    <span class="closex" onclick="closeText()">✕</span>
+    <h2>其他訊息</h2>
+    <div style="color:var(--dim);margin:6px 0 12px">自訂要傳給飛手的文字</div>
+    <input id="txtIn" maxlength="40" placeholder="輸入訊息…"
+      style="width:100%;font-size:18px;padding:12px;margin-bottom:12px" />
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="ghost" onclick="setTxt('風速增強，注意')">風速增強</button>
+      <button class="ghost" onclick="setTxt('注意鳥群')">注意鳥群</button>
+      <button class="ghost" onclick="setTxt('場地淨空')">場地淨空</button>
+      <button class="ghost" onclick="setTxt('暫停起飛')">暫停起飛</button>
+      <button class="ghost" onclick="setTxt('可以收機')">可以收機</button>
+    </div>
+    <button onclick="confirmText()" style="width:100%">送出</button>
+  </div>
+</div>
+
+<script>
+const PRESETS = [
+  {cmd:"開機預備", sub:"塔台指令", buttons:["收到"]},
+  {cmd:"連續進場", sub:"塔台指令", buttons:["收到"]},
+  {cmd:"可以起飛", sub:"塔台指令", buttons:["收到","已起飛"]},
+  {cmd:"可能空檔", sub:"塔台指令", buttons:["收到"], needsTime:true},
+  {cmd:"降落", sub:"塔台指令", buttons:["收到","降落完成"], needsMinutes:true},
+  {cmd:"立即降落", sub:"⚠ 緊急", buttons:["收到"], emergency:true},
+  {cmd:"其他", sub:"塔台訊息", buttons:["收到"], needsText:true},
+];
+const pilots = {};   // code -> state
+let openCode = null, seq = 0, client;
+
+// ── MQTT 設定（私有 HiveMQ Cloud，含帳密 + TLS）──
+const BROKER = "wss://6367a24e64534d569e37bd823aac8936.s1.eu.hivemq.cloud:8884/mqtt";
+const MQ_USER = "youren";
+const MQ_PASS = "Z7t32tag";
+const PFX = "rwtwr";  // topic 前綴
+const T = {
+  cmd:    c => `${PFX}/${c}/cmd`,
+  reply:  c => `${PFX}/${c}/reply`,
+  status: c => `${PFX}/${c}/status`,
+  tower:  c => `${PFX}/${c}/tower`,
+  ack:    c => `${PFX}/${c}/ack`,    // 塔台→飛手：確認收到回覆
+  ping:   c => `${PFX}/${c}/ping`,   // 飛手→塔台：延遲量測
+  pong:   c => `${PFX}/${c}/pong`,   // 塔台→飛手：回應
+  notam:  c => `${PFX}/${c}/notam`,  // 塔台→飛手：飛航公告（retained 常駐，一對一）
+};
+let notams = JSON.parse(localStorage.notams || "{}");   // code -> 公告文字（各飛手獨立）
+
+const $ = id => document.getElementById(id);
+$("zone").value = localStorage.zone || "北塔";
+$("ctrl").value = localStorage.ctrl || "鄭泰然";
+$("zone").oninput = () => { localStorage.zone = $("zone").value; reRegister(); };
+$("ctrl").oninput = () => { localStorage.ctrl = $("ctrl").value; reRegister(); };
+
+function connect() {
+  client = mqtt.connect(BROKER, {
+    clientId: "tower-" + Math.random().toString(16).slice(2, 10),
+    username: MQ_USER, password: MQ_PASS,
+    clean: true, keepalive: 30, reconnectPeriod: 2000, connectTimeout: 8000,
+  });
+  client.on("connect", () => { $("dot").classList.add("on"); resubAll(); });
+  client.on("reconnect", () => $("dot").classList.remove("on"));
+  client.on("offline", () => $("dot").classList.remove("on"));
+  client.on("close", () => $("dot").classList.remove("on"));
+  client.on("error", e => console.log("mqtt err", e && e.message));
+  client.on("message", onMqtt);
+}
+// 重連後重新訂閱所有飛手 + 重發塔台身分（retained）
+function resubAll() {
+  for (const code of Object.keys(pilots)) subscribePilot(code);
+}
+function subscribePilot(code) {
+  client.subscribe(T.reply(code), { qos: 1 });
+  client.subscribe(T.status(code), { qos: 1 });
+  client.subscribe(T.ping(code), { qos: 0 });   // ③ 延遲量測
+  publishTower(code);
+  publishNotam(code);                            // 補送目前公告給這台
+}
+
+// ── 飛航公告（一對一）──
+function publishNotam(code) {
+  if (!client || !client.connected) return;
+  const txt = notams[code] || "";
+  client.publish(T.notam(code), JSON.stringify({ text: txt }), { qos: 1, retain: true });
+}
+function setNotam(code, txt) {
+  notams[code] = txt;
+  localStorage.notams = JSON.stringify(notams);
+  publishNotam(code);
+  render();
+}
+function setNotamFromInput() {
+  if (!openCode) return;
+  setNotam(openCode, $("sNotamIn").value.trim());
+}
+function clearNotam() {
+  if (!openCode) return;
+  $("sNotamIn").value = "";
+  setNotam(openCode, "");
+}
+function publishTower(code) {
+  if (!client || !client.connected) return;
+  client.publish(T.tower(code),
+    JSON.stringify({ tower: $("zone").value, ctrl: $("ctrl").value }),
+    { qos: 1, retain: true });
+}
+// 塔台改名 → 重發身分給所有飛手
+function reRegister() {
+  for (const code of Object.keys(pilots)) publishTower(code);
+}
+
+function onMqtt(topic, payload) {
+  let m; try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+  const parts = topic.split("/");        // rwtwr/{code}/{kind}
+  const code = parts[1], kind = parts[2];
+  const p = pilots[code]; if (!p) return;
+  if (kind === "status") { Object.assign(p, m); render(); }
+  else if (kind === "reply") {
+    p.lastReply = m.reply; p.replyState = "responded"; render();
+    // ② 端到端確認：塔台收到回覆 → 立刻回 ack，讓飛手小屏打勾
+    client.publish(T.ack(code), JSON.stringify({ cmdId: m.cmdId || "", reply: m.reply }), { qos: 1 });
+  }
+  else if (kind === "ping") {
+    // ③ 回 pong（原封帶回時間戳），飛手據此算往返延遲
+    client.publish(T.pong(code), JSON.stringify({ t: m.t }), { qos: 0 });
+  }
+}
+
+function addPilot() {
+  const code = $("codeIn").value.toUpperCase().trim();
+  if (code.length < 3) return;
+  pilots[code] = pilots[code] || {code, replyState:"idle", lastCmd:""};
+  subscribePilot(code);
+  $("codeIn").value = "";
+  render();
+}
+
+function render() {
+  const list = $("list"); list.innerHTML = "";
+  const arr = Object.values(pilots);
+  $("empty").style.display = arr.length ? "none" : "block";
+  for (const p of arr) {
+    const div = document.createElement("div");
+    div.className = "pilot";
+    div.onclick = () => openSheet(p.code);
+    div.innerHTML = `
+      <span class="dot ${p.online?"on":""}"></span>
+      <div class="grow">
+        <div class="pname">${p.name || p.code}</div>
+        <div class="pcode">序號 ${p.code}${p.announce ? ` ・ 公告 <span style="color:var(--accent)">${p.announce}</span>` : ""}</div>
+        ${notams[p.code] ? `<div class="pcode" style="color:var(--amber)">📢 ${notams[p.code]}</div>` : ""}
+      </div>
+      ${cdHtml(p)}
+      ${stateBadge(p)}
+      ${battHtml(p.battery)}`;
+    list.appendChild(div);
+  }
+  if (openCode) refreshSheet();
+}
+function stateBadge(p){
+  if (p.replyState==="waiting") return `<span class="badge b-wait">等待回應</span>`;
+  if (p.replyState==="responded") return `<span class="badge b-ok">${p.lastReply||"已回應"}</span>`;
+  return "";
+}
+function battHtml(b){
+  if (b==null || b<0) return "";
+  return `<span class="batt ${b<=30?"low":""}">🔋${b}%</span>`;
+}
+
+function openSheet(code){ openCode = code; $("mask").classList.add("show"); refreshSheet(); }
+function closeSheet(){ openCode = null; $("mask").classList.remove("show"); }
+function refreshSheet(){
+  const p = pilots[openCode]; if (!p) return;
+  $("sName").textContent = p.name || p.code;
+  $("sCode").innerHTML = "序號 " + p.code + (p.online?" · 線上":" · 離線")
+    + (p.announce ? ' · 公告 <span style="color:var(--accent)">'+p.announce+'</span>' : "");
+  const b = $("sBanner");
+  if (p.replyState==="waiting"){ b.style.background="#F5A62322"; b.style.color="var(--amber)"; b.innerHTML="等待回應…（"+p.lastCmd+"） "+cdHtml(p); }
+  else if (p.replyState==="responded"){ b.style.background="#2FE0A822"; b.style.color="var(--accent)"; b.textContent="已回應："+(p.lastReply||""); }
+  else { b.style.background="#ffffff10"; b.style.color="var(--dim)"; b.textContent="尚未下達指令"; }
+  $("sNotamIn").value = notams[openCode] || "";   // 帶出這位飛手目前的公告
+  const g = $("sGrid"); g.innerHTML="";
+  for (const pr of PRESETS){
+    const d = document.createElement("div");
+    d.className = "cmd" + (pr.emergency?" emg":"");
+    d.textContent = pr.cmd;
+    d.onclick = () => sendCmd(p, pr);
+    g.appendChild(d);
+  }
+}
+function suggestTime(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function clockAfter(min){ const d=new Date(Date.now()+min*60000); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+
+function sendCmd(p, pr){
+  if (pr.needsMinutes){ openMin(p, pr); return; }   // 降落 → 數字鍵盤
+  if (pr.needsTime){ openTime(p, pr); return; }      // 可能空檔 → 時間選擇
+  if (pr.needsText){ openText(p, pr); return; }      // 其他 → 文字輸入
+  dispatch(p, pr, pr.cmd, pr.countdown||0, "");
+}
+
+// ── 可能空檔：時間選擇彈窗 ──
+let timeTarget = null;
+function openTime(p, pr){ timeTarget={p,pr}; setTimeQuick(15); $("timeMask").classList.add("show"); }
+function closeTime(){ $("timeMask").classList.remove("show"); timeTarget=null; }
+function setTimeQuick(min){ $("timeIn").value = clockAfter(min); }
+function confirmTime(){
+  if(!timeTarget) return;
+  const t = $("timeIn").value;
+  if(!t) return;
+  const {p,pr} = timeTarget;
+  dispatch(p, pr, "可能空檔 " + t, 0, "");
+  closeTime();
+}
+
+// ── 其他：自訂訊息彈窗 ──
+let txtTarget = null;
+function openText(p, pr){ txtTarget={p,pr}; $("txtIn").value=""; $("txtMask").classList.add("show"); setTimeout(()=>$("txtIn").focus(),50); }
+function closeText(){ $("txtMask").classList.remove("show"); txtTarget=null; }
+function setTxt(s){ $("txtIn").value=s; }
+function confirmText(){
+  if(!txtTarget) return;
+  const s = $("txtIn").value.trim();
+  if(!s) return;
+  const {p,pr} = txtTarget;
+  dispatch(p, pr, s, 0, "");
+  closeText();
+}
+
+function dispatch(p, pr, cmd, countdown, landAt){
+  const id = "c-" + Date.now() + "-" + (seq++);
+  // QoS 1：保證送達飛手小屏
+  client.publish(T.cmd(p.code),
+    JSON.stringify({cmdId:id, cmd, sub:pr.sub, buttons:pr.buttons, countdown, landAt}),
+    {qos:1});
+  p.lastCmd = cmd; p.replyState = "waiting"; p.lastReply = "";
+  p.cdEnd = countdown>0 ? Date.now()+countdown*1000 : 0;
+  p.landAt = landAt || "";
+  render();
+}
+
+// ── 降落分鐘數彈窗 ──
+let minTarget = null;
+function openMin(p, pr){ minTarget={p,pr}; $("minIn").value="5"; updateMinHint(); $("minMask").classList.add("show"); setTimeout(()=>$("minIn").focus(),50); }
+function closeMin(){ $("minMask").classList.remove("show"); minTarget=null; }
+function setMin(n){ $("minIn").value=n; updateMinHint(); }
+function updateMinHint(){
+  const n = parseInt($("minIn").value);
+  $("minHint").textContent = (n>0) ? ("預計 "+clockAfter(n)+" 降落") : "";
+}
+function confirmMin(){
+  if(!minTarget) return;
+  const n = parseInt($("minIn").value);
+  if(!(n>0)){ $("minHint").textContent="請輸入大於 0 的分鐘數"; return; }
+  const {p,pr} = minTarget;
+  dispatch(p, pr, pr.cmd, n*60, clockAfter(n));
+  closeMin();
+}
+
+// ── 倒數顯示（塔台端）──
+function cdHtml(p){
+  if(!p.cdEnd) return "";
+  const rem = Math.round((p.cdEnd-Date.now())/1000);
+  if(rem < -2) return "";
+  const r = Math.max(0, rem);
+  const mm=String(Math.floor(r/60)).padStart(2,"0"), ss=String(r%60).padStart(2,"0");
+  return `<span class="badge" style="background:#3B82F633;color:var(--blue)">⏱ ${mm}:${ss}${p.landAt?(" → "+p.landAt):""}</span>`;
+}
+setInterval(()=>{ if(Object.values(pilots).some(p=>p.cdEnd && Date.now()<p.cdEnd+2000)) render(); }, 1000);
+connect();
+</script>
+</body>
+</html>

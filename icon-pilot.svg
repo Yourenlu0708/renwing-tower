@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0F2018"/>
+      <stop offset="1" stop-color="#0B0E14"/>
+    </linearGradient>
+    <linearGradient id="ac" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3CF2B6"/>
+      <stop offset="1" stop-color="#2FE0A8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!-- 四軸機臂 -->
+  <g stroke="url(#ac)" stroke-width="46" stroke-linecap="round">
+    <line x1="512" y1="512" x2="300" y2="300"/>
+    <line x1="512" y1="512" x2="724" y2="300"/>
+    <line x1="512" y1="512" x2="300" y2="724"/>
+    <line x1="512" y1="512" x2="724" y2="724"/>
+  </g>
+  <!-- 螺旋槳 -->
+  <g fill="#FFFFFF" opacity="0.92">
+    <ellipse cx="300" cy="300" rx="116" ry="34" transform="rotate(-30 300 300)"/>
+    <ellipse cx="724" cy="300" rx="116" ry="34" transform="rotate(30 724 300)"/>
+    <ellipse cx="300" cy="724" rx="116" ry="34" transform="rotate(30 300 724)"/>
+    <ellipse cx="724" cy="724" rx="116" ry="34" transform="rotate(-30 724 724)"/>
+  </g>
+  <!-- 機身 -->
+  <rect x="430" y="430" width="164" height="164" rx="40" fill="#2FE0A8"/>
+  <circle cx="512" cy="512" r="34" fill="#0B0E14"/>
+</svg>

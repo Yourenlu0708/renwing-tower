@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>塔台通訊系統</title>
+<style>
+  :root { --bg:#0B0E14; --card:#161B26; --accent:#2FE0A8; --blue:#3B82F6; --dim:#8A93A6; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:#fff;
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:24px; }
+  h1 { font-size:30px; letter-spacing:3px; margin:0 0 2px; }
+  .sub { color:var(--dim); letter-spacing:1px; margin-bottom:18px; }
+  a.card { width:min(420px,90vw); text-decoration:none; color:#fff; background:var(--card);
+    border:1.5px solid #ffffff22; border-radius:20px; padding:22px; display:flex; gap:18px; align-items:center; }
+  a.card .ico { width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px; }
+  a.tower { border-color:#3B82F666; } a.tower .ico { background:#3B82F626; }
+  a.pilot { border-color:#2FE0A866; } a.pilot .ico { background:#2FE0A826; }
+  .t { font-size:20px; font-weight:700; } .d { color:var(--dim); font-size:14px; }
+</style>
+</head>
+<body>
+  <div style="text-align:center"><h1>塔台通訊</h1><div class="sub">Tower ⇄ Pilot</div></div>
+  <a class="card tower" href="tower.html"><div class="ico">🗼</div><div><div class="t">塔台管制</div><div class="d">筆電開這個 · 下指令、看回應</div></div></a>
+  <a class="card pilot" href="pilot.html"><div class="ico">🛩️</div><div><div class="t">飛手端</div><div class="d">手機開這個 · 收指令、按回覆</div></div></a>
+</body>
+</html>
