@@ -56,6 +56,19 @@
   .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
   .cmd { padding:18px 6px; border-radius:14px; text-align:center; font-weight:700; border:1.2px solid var(--blue); background:#3B82F624; }
   .cmd.emg { border-color:var(--red); background:#EF444424; color:var(--red); }
+  .logpanel { margin-top:26px; background:var(--card); border:1px solid #ffffff14; border-radius:16px; padding:16px; }
+  .loghead { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .logtitle { margin:0; font-size:18px; }
+  .logcount { color:var(--dim); font-size:12px; margin-left:6px; }
+  .loghead button { padding:8px 11px; font-size:13px; }
+  .loglist { display:flex; flex-direction:column; gap:8px; max-height:390px; overflow:auto; }
+  .logrow { background:var(--bg); border:1px solid #ffffff12; border-radius:11px; padding:10px 12px; }
+  .logmeta { color:var(--dim); font-size:12px; display:flex; justify-content:space-between; gap:10px; }
+  .logcmd { margin-top:5px; font-weight:700; }
+  .logreply { margin-top:4px; color:var(--dim); font-size:12px; }
+  .logreply.wait { color:var(--amber); }
+  .logreply.done { color:var(--accent); }
+  .logempty { color:var(--dim); font-size:13px; padding:8px 0 2px; }
   .closex { float:right; color:var(--dim); cursor:pointer; font-size:22px; line-height:1; }
 </style>
   <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
@@ -84,6 +97,14 @@
   <div id="known" class="known"></div>
   <div id="list"></div>
   <div class="empty" id="empty">尚無飛手 — 輸入飛手裝置畫面上顯示的序號來配對</div>
+  <section class="logpanel" aria-labelledby="logTitle">
+    <div class="loghead">
+      <h2 class="logtitle" id="logTitle">通聯紀錄<span class="logcount" id="logCount"></span></h2>
+      <button class="ghost" onclick="exportCommLogs()">匯出 CSV</button>
+    </div>
+    <div class="logempty" id="logEmpty">尚無對飛手的輸出通聯紀錄</div>
+    <div class="loglist" id="commLogList"></div>
+  </section>
 </main>
 
 <div class="mask" id="mask">
@@ -204,6 +225,7 @@ const PILOT_ROSTER = [
   { code: "NSR8U", name: "盧宥任" },
 ];
 
+const MAX_COMM_LOGS = 500;
 const STAFF_DB_KEY = "towerStaffDbV1";
 const safeJSON = (raw, fallback) => {
   try { return raw ? JSON.parse(raw) : fallback; }
@@ -216,6 +238,7 @@ if (!staffDb.personnel || typeof staffDb.personnel !== "object") staffDb.personn
 let names = {};    // 目前值班人員的 code -> 飛手名稱
 let notams = {};   // 目前值班人員的 code -> 公告文字
 let savedPilots = {}; // 目前值班人員曾加入過的飛手
+let commLogs = []; // 目前值班人員的對飛手輸出通聯紀錄
 let duty = safeJSON(localStorage.duty, { tower: "", name: "" });
 let staffSyncReady = false;
 let staffSyncTimer = null;
@@ -235,6 +258,7 @@ function staffRecord(create = true) {
       names: {},
       notams: {},
       savedPilots: {},
+      commLogs: [],
     };
   }
   return staffDb.personnel[key] || null;
@@ -250,6 +274,7 @@ function migrateLegacy(record) {
   record.names = { ...oldNames, ...(record.names || {}) };
   record.notams = { ...oldNotams, ...(record.notams || {}) };
   record.savedPilots = record.savedPilots || {};
+  record.commLogs = Array.isArray(record.commLogs) ? record.commLogs : [];
   for (const code of record.activeCodes) {
     record.savedPilots[code] = {
       code,
@@ -268,6 +293,7 @@ function persistStaff() {
   record.names = { ...names };
   record.notams = { ...notams };
   record.savedPilots = { ...savedPilots };
+  record.commLogs = commLogs.slice(-MAX_COMM_LOGS);
   localStorage.setItem(STAFF_DB_KEY, JSON.stringify(staffDb));
   if (publish) {
     if (staffSyncReady) publishStaffRecord();
@@ -290,6 +316,7 @@ function staffPayload() {
     savedPilots,
     names,
     notams,
+    commLogs: commLogs.slice(-MAX_COMM_LOGS),
   });
 }
 
@@ -332,6 +359,17 @@ function mergeRemoteStaff(payload) {
   for (const [code, text] of Object.entries(remote.notams || {})) {
     if (!Object.prototype.hasOwnProperty.call(notams, code)) notams[code] = text;
   }
+  const mergedLogs = new Map(commLogs.map(item => [item.id, item]));
+  for (const item of Array.isArray(remote.commLogs) ? remote.commLogs : []) {
+    if (!item || !item.id) continue;
+    const local = mergedLogs.get(item.id);
+    if (!local || (item.updatedAt || item.time || 0) >= (local.updatedAt || local.time || 0)) {
+      mergedLogs.set(item.id, item);
+    }
+  }
+  commLogs = Array.from(mergedLogs.values())
+    .sort((a, b) => (a.time || 0) - (b.time || 0))
+    .slice(-MAX_COMM_LOGS);
 
   persistStaff({ publish: false });
   refreshSavedPilots();
@@ -426,13 +464,16 @@ function unsubscribeAllPilots() {
 
 function loadDutyData() {
   for (const code of Object.keys(pilots)) delete pilots[code];
-  names = {}; notams = {}; savedPilots = {};
+  names = {}; notams = {}; savedPilots = {}; commLogs = [];
   const record = staffRecord();
   if (record) {
     migrateLegacy(record);
     names = { ...(record.names || {}) };
     notams = { ...(record.notams || {}) };
     savedPilots = { ...(record.savedPilots || {}) };
+    commLogs = (Array.isArray(record.commLogs) ? record.commLogs : [])
+      .sort((a, b) => (a.time || 0) - (b.time || 0))
+      .slice(-MAX_COMM_LOGS);
     for (const code of record.activeCodes || []) {
       pilots[code] = { code, replyState: "idle", lastCmd: "" };
       if (!savedPilots[code]) rememberPilot(code, names[code] || "");
@@ -524,8 +565,15 @@ function publishNotam(code) {
 }
 function setNotam(code, txt) {
   notams[code] = txt;
-  persistStaff();
   publishNotam(code);
+  addCommLog(
+    pilots[code],
+    txt ? "飛航公告：" + txt : "清除飛航公告",
+    "飛航公告",
+    "",
+    "已送出",
+  );
+  persistStaff();
   render();
 }
 function setNotamFromInput() {
@@ -537,6 +585,109 @@ function clearNotam() {
   $("sNotamIn").value = "";
   setNotam(openCode, "");
 }
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+}
+
+function logTime(ts) {
+  if (!ts) return "—";
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(new Date(ts));
+}
+
+function trimCommLogs() {
+  commLogs = commLogs
+    .filter(item => item && item.id && item.code && item.command)
+    .sort((a, b) => (a.time || 0) - (b.time || 0))
+    .slice(-MAX_COMM_LOGS);
+}
+
+function addCommLog(p, command, category, cmdId = "", status = "等待回覆") {
+  if (!p || !p.code || !command) return null;
+  const now = Date.now();
+  const log = {
+    id: cmdId || `log-${now}-${seq++}`,
+    cmdId: cmdId || "",
+    time: now,
+    updatedAt: now,
+    tower: duty.tower,
+    staffName: duty.name,
+    code: p.code,
+    pilotName: displayName(p),
+    category: category || "塔台通訊",
+    command: String(command),
+    reply: "",
+    replyAt: 0,
+    status,
+  };
+  commLogs.push(log);
+  trimCommLogs();
+  return log;
+}
+
+function updateCommLogReply(code, message) {
+  const cmdId = message && message.cmdId;
+  let log = cmdId ? commLogs.find(item => item.cmdId === cmdId) : null;
+  if (!log) {
+    log = [...commLogs].reverse().find(item => item.code === code && item.status === "等待回覆");
+  }
+  if (!log) return;
+  log.reply = String(message && message.reply ? message.reply : "已回應");
+  log.replyAt = Date.now();
+  log.updatedAt = log.replyAt;
+  log.status = "已回覆";
+  persistStaff();
+}
+
+function renderCommLogs() {
+  const list = $("commLogList");
+  const empty = $("logEmpty");
+  const count = $("logCount");
+  if (!list || !empty || !count) return;
+  trimCommLogs();
+  const rows = [...commLogs].reverse().slice(0, 100);
+  count.textContent = commLogs.length ? `（共 ${commLogs.length} 筆，顯示最近 ${rows.length} 筆）` : "";
+  empty.style.display = rows.length ? "none" : "block";
+  list.innerHTML = rows.map(log => {
+    const statusClass = log.status === "等待回覆" ? "wait" : "done";
+    const replyText = log.reply
+      ? `回覆：${escapeHtml(log.reply)}${log.replyAt ? " · " + escapeHtml(logTime(log.replyAt)) : ""}`
+      : escapeHtml(log.status || "已送出");
+    return `<div class="logrow">
+      <div class="logmeta"><span>${escapeHtml(logTime(log.time))}</span><span>${escapeHtml(log.category || "塔台通訊")}</span></div>
+      <div class="logcmd">→ ${escapeHtml(log.pilotName || log.code)}（${escapeHtml(log.code)}）：${escapeHtml(log.command)}</div>
+      <div class="logreply ${statusClass}">${replyText}</div>
+    </div>`;
+  }).join("");
+}
+
+function exportCommLogs() {
+  if (!commLogs.length) {
+    alert("目前沒有通聯紀錄可匯出");
+    return;
+  }
+  const cell = value => `"${String(value == null ? "" : value).replace(/"/g, '""')}"`;
+  const rows = [
+    ["時間", "塔台", "塔台人員", "飛手", "序號", "分類", "輸出通聯", "回覆", "狀態", "回覆時間"],
+    ...[...commLogs].sort((a, b) => (a.time || 0) - (b.time || 0)).map(log => [
+      logTime(log.time), log.tower, log.staffName, log.pilotName, log.code,
+      log.category, log.command, log.reply, log.status, log.replyAt ? logTime(log.replyAt) : "",
+    ]),
+  ];
+  const csv = "\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `tower-comm-log-${duty.id || "staff"}-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function publishTower(code) {
   if (!client || !client.connected) return;
   client.publish(T.tower(code),
@@ -559,7 +710,9 @@ function onMqtt(topic, payload) {
   const p = pilots[code]; if (!p) return;
   if (kind === "status") { Object.assign(p, m); render(); }
   else if (kind === "reply") {
-    p.lastReply = m.reply; p.replyState = "responded"; render();
+    p.lastReply = m.reply; p.replyState = "responded";
+    updateCommLogReply(code, m);
+    render();
     // ② 端到端確認：塔台收到回覆 → 立刻回 ack，讓飛手小屏打勾
     client.publish(T.ack(code), JSON.stringify({ cmdId: m.cmdId || "", reply: m.reply }), { qos: 1 });
   }
@@ -622,6 +775,7 @@ function render() {
     list.appendChild(div);
   }
   if (openCode) refreshSheet();
+  renderCommLogs();
 }
 function stateBadge(p){
   if (p.replyState==="waiting") return `<span class="badge b-wait">等待回應</span>`;
@@ -699,6 +853,8 @@ function dispatch(p, pr, cmd, countdown, landAt){
   client.publish(T.cmd(p.code),
     JSON.stringify({cmdId:id, cmd, sub:pr.sub, buttons:pr.buttons, countdown, landAt}),
     {qos:1});
+  addCommLog(p, cmd, pr.sub, id, "等待回覆");
+  persistStaff();
   p.lastCmd = cmd; p.replyState = "waiting"; p.lastReply = "";
   p.cdEnd = countdown>0 ? Date.now()+countdown*1000 : 0;
   p.landAt = landAt || "";
