@@ -33,7 +33,9 @@
   button.ghost { background:#ffffff14; }
   .pilot { background:var(--card); border:1px solid #ffffff14; border-radius:16px; padding:16px; margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
   .pilot:hover { border-color:#ffffff33; }
-  .pname { font-size:18px; font-weight:700; } .pcode { color:var(--dim); font-size:12px; }
+  .pname { font-size:18px; font-weight:700; }
+  .pilot-notam { color:var(--amber); font-size:14px; font-weight:600; }
+  .pcode { color:var(--dim); font-size:12px; }
   .grow { flex:1; }
   .badge { padding:5px 11px; border-radius:20px; font-size:12px; font-weight:700; }
   .b-wait { background:#F5A62330; color:var(--amber); } .b-ok { background:#2FE0A830; color:var(--accent); }
@@ -608,12 +610,11 @@ function render() {
     const div = document.createElement("div");
     div.className = "pilot";
     div.onclick = () => openSheet(p.code);
-    div.innerHTML = `
+      div.innerHTML = `
       <span class="dot ${p.online?"on":""}"></span>
       <div class="grow">
-        <div class="pname">${displayName(p)}</div>
+        <div class="pname">${displayName(p)}${notams[p.code] ? ` <span class="pilot-notam">（${notams[p.code]}）</span>` : ""}</div>
         <div class="pcode">序號 ${p.code}${p.announce ? ` ・ 公告 <span style="color:var(--accent)">${p.announce}</span>` : ""}</div>
-        ${notams[p.code] ? `<div class="pcode" style="color:var(--amber)">📢 ${notams[p.code]}</div>` : ""}
       </div>
       ${cdHtml(p)}
       ${stateBadge(p)}
