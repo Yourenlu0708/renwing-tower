@@ -99,6 +99,7 @@
     </div>
     <div style="color:var(--dim);font-weight:600;margin:14px 0 8px">下達指令</div>
     <div class="grid" id="sGrid"></div>
+    <button class="ghost" style="width:100%;margin-top:16px;color:var(--red)" onclick="removePilot(openCode)">移除此飛手</button>
   </div>
 </div>
 
@@ -185,6 +186,7 @@ const T = {
 };
 let notams = JSON.parse(localStorage.notams || "{}");   // code -> 公告文字（各飛手獨立）
 let names  = JSON.parse(localStorage.names  || "{}");   // code -> 塔台自訂飛手名字
+const savePilots = () => localStorage.pilotCodes = JSON.stringify(Object.keys(pilots));  // 記住已加入的飛手
 
 const $ = id => document.getElementById(id);
 $("zone").value = localStorage.zone || "";
@@ -285,7 +287,21 @@ function addPilot() {
   if (nm) { names[code] = nm; localStorage.names = JSON.stringify(names); }
   pilots[code] = pilots[code] || {code, replyState:"idle", lastCmd:""};
   subscribePilot(code);
+  savePilots();
   $("codeIn").value = ""; $("nameIn").value = "";
+  render();
+}
+
+function removePilot(code) {
+  if (!code || !confirm("確定移除這位飛手？")) return;
+  if (client && client.connected) {
+    client.unsubscribe(T.reply(code));
+    client.unsubscribe(T.status(code));
+    client.unsubscribe(T.ping(code));
+  }
+  delete pilots[code];
+  savePilots();
+  closeSheet();
   render();
 }
 
@@ -421,6 +437,12 @@ function cdHtml(p){
   return `<span class="badge" style="background:#3B82F633;color:var(--blue)">⏱ ${mm}:${ss}${p.landAt?(" → "+p.landAt):""}</span>`;
 }
 setInterval(()=>{ if(Object.values(pilots).some(p=>p.cdEnd && Date.now()<p.cdEnd+2000)) render(); }, 1000);
+
+// 還原上次已加入的飛手（關閉網頁再開，不用重加；連上後 resubAll 會重新訂閱）
+for (const code of JSON.parse(localStorage.pilotCodes || "[]")) {
+  pilots[code] = pilots[code] || { code, replyState:"idle", lastCmd:"" };
+}
+render();
 connect();
 </script>
 </body>
