@@ -19,12 +19,13 @@
   header h1 { font-size:19px; margin:0; letter-spacing:1px; white-space:nowrap; }
   .dot { width:12px;height:12px;border-radius:50%;background:var(--red); margin-left:auto; flex:none; }
   .dot.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
-  input { background:var(--bg); color:#fff; border:1px solid #ffffff22; border-radius:10px; padding:11px 12px; font-size:16px; }
+  input, select { background:var(--bg); color:#fff; border:1px solid #ffffff22; border-radius:10px; padding:11px 12px; font-size:16px; font-family:inherit; }
   .idbar { display:flex; gap:10px; margin-bottom:14px; }
-  .idbar input { flex:1; min-width:0; }
+  .idbar input, .idbar select { flex:1; min-width:0; }
   main { padding:16px 18px; max-width:760px; margin:0 auto; }
-  .addbar { display:flex; gap:10px; margin-bottom:18px; }
-  .addbar input { flex:1; min-width:0; text-transform:uppercase; letter-spacing:3px; text-align:center; font-size:17px; }
+  .addbar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+  .addbar input { flex:1 1 120px; min-width:0; }
+  #codeIn { text-transform:uppercase; letter-spacing:3px; text-align:center; font-size:17px; }
   .addbar button { white-space:nowrap; flex:none; }
   button { cursor:pointer; border:none; border-radius:12px; font-size:15px; font-weight:700; padding:12px 16px; color:#fff; background:var(--blue); font-family:inherit; white-space:nowrap; }
   .notambar button { flex:none; }
@@ -63,12 +64,17 @@
 </header>
 <main>
   <div class="idbar">
-    <input id="zone" placeholder="塔台名（例 北塔）"/>
+    <select id="zone">
+      <option value="">選擇塔台</option>
+      <option value="北塔">北塔</option>
+      <option value="南塔">南塔</option>
+    </select>
     <input id="ctrl" placeholder="管制員姓名"/>
   </div>
   <div class="addbar">
-    <input id="codeIn" maxlength="6" placeholder="輸入序號 例 K7P2Q" />
-    <button onclick="addPilot()">＋ 新增飛手</button>
+    <input id="codeIn" maxlength="6" placeholder="序號" />
+    <input id="nameIn" maxlength="10" placeholder="飛手名字（選填）" />
+    <button onclick="addPilot()">＋ 新增</button>
   </div>
   <div id="list"></div>
   <div class="empty" id="empty">尚無飛手 — 輸入飛手裝置畫面上顯示的序號來配對</div>
@@ -80,7 +86,12 @@
     <h2 id="sName">—</h2>
     <div class="pcode" id="sCode"></div>
     <div class="banner" id="sBanner"></div>
-    <div style="color:var(--dim);font-weight:600;margin-bottom:8px">飛航公告（只給這位飛手）</div>
+    <div style="color:var(--dim);font-weight:600;margin-bottom:8px">飛手名稱</div>
+    <div class="notambar">
+      <input id="sNameIn" maxlength="10" placeholder="飛手名字" />
+      <button onclick="renameFromInput()">更新</button>
+    </div>
+    <div style="color:var(--dim);font-weight:600;margin:14px 0 8px">飛航公告（只給這位飛手）</div>
     <div class="notambar">
       <input id="sNotamIn" maxlength="60" placeholder="輸入飛航公告…" />
       <button onclick="setNotamFromInput()">發布</button>
@@ -173,12 +184,25 @@ const T = {
   notam:  c => `${PFX}/${c}/notam`,  // 塔台→飛手：飛航公告（retained 常駐，一對一）
 };
 let notams = JSON.parse(localStorage.notams || "{}");   // code -> 公告文字（各飛手獨立）
+let names  = JSON.parse(localStorage.names  || "{}");   // code -> 塔台自訂飛手名字
 
 const $ = id => document.getElementById(id);
 $("zone").value = localStorage.zone || "";
 $("ctrl").value = localStorage.ctrl || "";
-$("zone").oninput = () => { localStorage.zone = $("zone").value; reRegister(); };
+$("zone").onchange = () => { localStorage.zone = $("zone").value; reRegister(); };
 $("ctrl").oninput = () => { localStorage.ctrl = $("ctrl").value; reRegister(); };
+
+// 顯示名：塔台自訂名 > 序號
+const displayName = p => names[p.code] || p.code;
+function setName(code, nm) {
+  if (nm) names[code] = nm; else delete names[code];
+  localStorage.names = JSON.stringify(names);
+  render();
+}
+function renameFromInput() {
+  if (!openCode) return;
+  setName(openCode, $("sNameIn").value.trim());
+}
 
 function connect() {
   client = mqtt.connect(BROKER, {
@@ -257,9 +281,11 @@ function onMqtt(topic, payload) {
 function addPilot() {
   const code = $("codeIn").value.toUpperCase().trim();
   if (code.length < 3) return;
+  const nm = $("nameIn").value.trim();
+  if (nm) { names[code] = nm; localStorage.names = JSON.stringify(names); }
   pilots[code] = pilots[code] || {code, replyState:"idle", lastCmd:""};
   subscribePilot(code);
-  $("codeIn").value = "";
+  $("codeIn").value = ""; $("nameIn").value = "";
   render();
 }
 
@@ -274,7 +300,7 @@ function render() {
     div.innerHTML = `
       <span class="dot ${p.online?"on":""}"></span>
       <div class="grow">
-        <div class="pname">${p.name || p.code}</div>
+        <div class="pname">${displayName(p)}</div>
         <div class="pcode">序號 ${p.code}${p.announce ? ` ・ 公告 <span style="color:var(--accent)">${p.announce}</span>` : ""}</div>
         ${notams[p.code] ? `<div class="pcode" style="color:var(--amber)">📢 ${notams[p.code]}</div>` : ""}
       </div>
@@ -299,7 +325,8 @@ function openSheet(code){ openCode = code; $("mask").classList.add("show"); refr
 function closeSheet(){ openCode = null; $("mask").classList.remove("show"); }
 function refreshSheet(){
   const p = pilots[openCode]; if (!p) return;
-  $("sName").textContent = p.name || p.code;
+  $("sName").textContent = displayName(p);
+  $("sNameIn").value = names[openCode] || "";       // 帶出目前名字
   $("sCode").innerHTML = "序號 " + p.code + (p.online?" · 線上":" · 離線")
     + (p.announce ? ' · 公告 <span style="color:var(--accent)">'+p.announce+'</span>' : "");
   const b = $("sBanner");
