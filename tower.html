@@ -57,10 +57,11 @@
   .cmd { padding:18px 6px; border-radius:14px; text-align:center; font-weight:700; border:1.2px solid var(--blue); background:#3B82F624; }
   .cmd.emg { border-color:var(--red); background:#EF444424; color:var(--red); }
   .logpanel { margin-top:26px; background:var(--card); border:1px solid #ffffff14; border-radius:16px; padding:16px; }
-  .loghead { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .loghead { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
   .logtitle { margin:0; font-size:18px; }
   .logcount { color:var(--dim); font-size:12px; margin-left:6px; }
-  .loghead button { padding:8px 11px; font-size:13px; }
+  .loghead-btns { display:flex; gap:8px; flex:none; }
+  .loghead button { padding:8px 11px; font-size:13px; white-space:nowrap; }
   .loglist { display:flex; flex-direction:column; gap:8px; max-height:390px; overflow:auto; }
   .logrow { background:var(--bg); border:1px solid #ffffff12; border-radius:11px; padding:10px 12px; }
   .logmeta { color:var(--dim); font-size:12px; display:flex; justify-content:space-between; gap:10px; }
@@ -100,7 +101,10 @@
   <section class="logpanel" aria-labelledby="logTitle">
     <div class="loghead">
       <h2 class="logtitle" id="logTitle">通聯紀錄<span class="logcount" id="logCount"></span></h2>
-      <button class="ghost" onclick="exportCommLogs()">匯出 CSV</button>
+      <div class="loghead-btns">
+        <button class="ghost" onclick="exportCommLogs()">匯出 CSV</button>
+        <button class="ghost" style="color:var(--red)" onclick="clearCommLogs()">清除紀錄</button>
+      </div>
     </div>
     <div class="logempty" id="logEmpty">尚無對飛手的輸出通聯紀錄</div>
     <div class="loglist" id="commLogList"></div>
@@ -686,6 +690,14 @@ function exportCommLogs() {
   link.download = `tower-comm-log-${duty.id || "staff"}-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function clearCommLogs() {
+  if (!commLogs.length) { alert("目前沒有通聯紀錄"); return; }
+  if (!confirm(`確定清除全部 ${commLogs.length} 筆通聯紀錄？此動作無法復原，建議先「匯出 CSV」備份。`)) return;
+  commLogs = [];
+  persistStaff();      // 存檔 + 同步給其他 iPad/瀏覽器（retained），避免清了又被同步回來
+  renderCommLogs();
 }
 
 function publishTower(code) {
