@@ -15,17 +15,19 @@
   :root { --bg:#0B0E14; --card:#161B26; --accent:#2FE0A8; --blue:#3B82F6; --amber:#F5A623; --red:#EF4444; --dim:#8A93A6; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:#fff; font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif; }
-  header { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid #ffffff14; position:sticky; top:0; background:var(--bg); }
-  header h1 { font-size:20px; margin:0; letter-spacing:1px; }
-  .dot { width:11px;height:11px;border-radius:50%;background:var(--red); }
+  header { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid #ffffff14; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:19px; margin:0; letter-spacing:1px; white-space:nowrap; }
+  .dot { width:12px;height:12px;border-radius:50%;background:var(--red); margin-left:auto; flex:none; }
   .dot.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
-  input { background:var(--bg); color:#fff; border:1px solid #ffffff22; border-radius:10px; padding:9px 12px; font-size:15px; }
-  .who { margin-left:auto; color:var(--dim); font-size:13px; display:flex; gap:6px; align-items:center; }
-  .who input { width:90px; padding:5px 8px; font-size:13px; }
-  main { padding:18px 20px; max-width:760px; margin:0 auto; }
+  input { background:var(--bg); color:#fff; border:1px solid #ffffff22; border-radius:10px; padding:11px 12px; font-size:16px; }
+  .idbar { display:flex; gap:10px; margin-bottom:14px; }
+  .idbar input { flex:1; min-width:0; }
+  main { padding:16px 18px; max-width:760px; margin:0 auto; }
   .addbar { display:flex; gap:10px; margin-bottom:18px; }
-  .addbar input { flex:1; text-transform:uppercase; letter-spacing:6px; text-align:center; font-size:18px; }
-  button { cursor:pointer; border:none; border-radius:12px; font-size:15px; font-weight:700; padding:11px 16px; color:#fff; background:var(--blue); font-family:inherit; }
+  .addbar input { flex:1; min-width:0; text-transform:uppercase; letter-spacing:3px; text-align:center; font-size:17px; }
+  .addbar button { white-space:nowrap; flex:none; }
+  button { cursor:pointer; border:none; border-radius:12px; font-size:15px; font-weight:700; padding:12px 16px; color:#fff; background:var(--blue); font-family:inherit; white-space:nowrap; }
+  .notambar button { flex:none; }
   button.ghost { background:#ffffff14; }
   .pilot { background:var(--card); border:1px solid #ffffff14; border-radius:16px; padding:16px; margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
   .pilot:hover { border-color:#ffffff33; }
@@ -58,12 +60,12 @@
 <header>
   <h1>🗼 塔台管制</h1>
   <span class="dot" id="dot"></span>
-  <span class="who">塔台
-    <input id="zone" placeholder="北塔"/>
-    <input id="ctrl" placeholder="管制員"/>
-  </span>
 </header>
 <main>
+  <div class="idbar">
+    <input id="zone" placeholder="塔台名（例 北塔）"/>
+    <input id="ctrl" placeholder="管制員姓名"/>
+  </div>
   <div class="addbar">
     <input id="codeIn" maxlength="6" placeholder="輸入序號 例 K7P2Q" />
     <button onclick="addPilot()">＋ 新增飛手</button>
@@ -173,8 +175,8 @@ const T = {
 let notams = JSON.parse(localStorage.notams || "{}");   // code -> 公告文字（各飛手獨立）
 
 const $ = id => document.getElementById(id);
-$("zone").value = localStorage.zone || "北塔";
-$("ctrl").value = localStorage.ctrl || "鄭泰然";
+$("zone").value = localStorage.zone || "";
+$("ctrl").value = localStorage.ctrl || "";
 $("zone").oninput = () => { localStorage.zone = $("zone").value; reRegister(); };
 $("ctrl").oninput = () => { localStorage.ctrl = $("ctrl").value; reRegister(); };
 
